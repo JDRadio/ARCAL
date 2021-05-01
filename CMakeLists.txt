@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.16)
+project(arcal)
+
+if (NOT CMAKE_BUILD_TYPE)
+    message("Setting build type to Release")
+    set(CMAKE_BUILD_TYPE "Release")
+endif ()
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
+
+include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+conan_basic_setup()
+
+add_compile_options(-Wall -Wextra -pedantic -Wno-unused-parameter)
+
+include_directories(src ${CMAKE_CURRENT_BINARY_DIR}/include ${CONAN_INCLUDE_DIRS})
+link_directories(${CMAKE_CURRENT_BINARY_DIR}/lib ${CMAKE_CURRENT_BINARY_DIR}/lib64 ${CONAN_LIB_DIRS})
+
+add_subdirectory(src)
