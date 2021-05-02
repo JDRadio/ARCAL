@@ -14,7 +14,8 @@ conan_basic_setup()
 
 add_compile_options(-Wall -Wextra -pedantic -Wno-unused-parameter)
 
-include_directories(src ${CMAKE_CURRENT_BINARY_DIR}/include ${CONAN_INCLUDE_DIRS})
+include_directories(src lib/rtl-sdr/include ${CMAKE_CURRENT_BINARY_DIR}/include ${CONAN_INCLUDE_DIRS})
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/lib ${CMAKE_CURRENT_BINARY_DIR}/lib64 ${CONAN_LIB_DIRS})
 
 add_subdirectory(src)
+add_subdirectory(lib)
