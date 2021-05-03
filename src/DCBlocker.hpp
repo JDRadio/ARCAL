@@ -4,10 +4,21 @@
 //! \date 2021
 //! \copyright JDRadio Inc.
 ////////////////////////////////////////////////////////////////////////////////
-#include "ARCAL.hpp"
+#ifndef JDRADIO_DCBLOCKER_HPP
+#define JDRADIO_DCBLOCKER_HPP
 
-int main(int, char**)
+class DCBlocker
 {
-    ARCAL{}.run();
-    return 0;
-}
+public:
+    DCBlocker(void) noexcept;
+    void execute(float& i, float& q) noexcept;
+
+private:
+    float r_;
+    float xi_;
+    float xq_;
+    float yi_;
+    float yq_;
+};
+
+#endif
