@@ -6,4 +6,6 @@ target_link_libraries(arcal
     rtlsdr
     usb
     fmt
+    fftw3f
+    m
 )
