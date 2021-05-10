@@ -25,7 +25,7 @@ Waterfall::Waterfall(void) noexcept :
     last_timestamp_{0}
 {
     setFFTLength(256);
-    setAverageLength(32);
+    setAverageLength(64);
     setReferenceLevel(-80);
     setScale(10);
 }

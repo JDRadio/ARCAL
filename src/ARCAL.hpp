@@ -32,7 +32,7 @@ private:
     std::vector<float> convertSamples(std::vector<std::uint8_t> const& in, bool block_dc);
     float calculateDCOffset(std::vector<std::uint8_t> const& in);
     void click(void);
-    void detectClicks(std::vector<float> const& samples);
+    void detectClicks(std::vector<float> const& fft_samples);
     void verifyClicks(void);
     void onRemoteActivation(void);
 
@@ -47,6 +47,8 @@ private:
     float rf_gain_;
     bool signal_present_;
     std::set<std::chrono::steady_clock::time_point> clicks_;
+    FFT fft_;
+    bool show_waterfall_;
 };
 
 #endif

@@ -17,12 +17,15 @@ ARCAL::ARCAL(void) noexcept :
     dc_offset_{},
     filter_dc_{false},
     frequency_{146'430'000U},
-    sample_rate_{240'000U},
+    sample_rate_{256'000U},
     agc_enabled_{false},
     rf_gain_{0.f},
     signal_present_{false},
-    clicks_{}
+    clicks_{},
+    fft_{},
+    show_waterfall_{true}
 {
+    fft_.setLength(32);
 }
 
 void ARCAL::showBasicInfo(void) noexcept
@@ -174,22 +177,28 @@ void ARCAL::click(void)
     verifyClicks();
 }
 
-void ARCAL::detectClicks(std::vector<float> const& samples)
+void ARCAL::detectClicks(std::vector<float> const& fft_samples)
 {
     //! \todo 2021-05-09: add dynamic threshold over noise
     static float const detection_threshold_ = std::pow(10.f, 10.f / 10.f);
     //! \todo 2021-05-09: add hold time
     static unsigned int hold_ = 0;
     //! \todo 2021-05-09: add noise level estimation
-    static float const noise_level_ = std::pow(10.f, -39.f / 10.f);
+    static float const noise_level_ = std::pow(10.f, -58.f / 10.f);
     //! \todo 2021-05-09: consider a click as a transmission of not more than X milliseconds
     static unsigned int on_time_ = 0;
 
-    unsigned int samples_size = samples.size();
-    auto const* ptr = samples.data();
+    unsigned int const fft_size = 32;
+    unsigned int const num_fft = fft_samples.size() / (fft_size * 2);
 
-    for (unsigned int n = 0; n < samples_size; n += 2) {
-        float power = ptr[n]*ptr[n] + ptr[n+1]*ptr[n+1];
+    for (unsigned int k = 0; k < num_fft; ++k) {
+        auto const* ptr = fft_samples.data() + k * (fft_size * 2);
+
+        float power = 0;
+
+        for (unsigned int bin = 15; bin <= 17; ++bin) {
+            power += ptr[bin*2]*ptr[bin*2] + ptr[bin*2+1]*ptr[bin*2+1];
+        }
 
         bool signal_detected = (power >= noise_level_ * detection_threshold_);
 
@@ -201,22 +210,18 @@ void ARCAL::detectClicks(std::vector<float> const& samples)
         }
         else {
             ++on_time_;
-            hold_ = 4800;   // 20 ms @ 240 kHz
-            // hold_ = 160;   // 20 ms @ 8 kHz
+            // hold_ = 480;   // 2 ms @ 240 kHz
+            hold_ = 80;   // 10 ms @ 8 kHz
         }
 
-        if (signal_detected && ! signal_present_) {
-            std::cout << fmt::format("Incoming signal, power: {:.3f} dBFS", 10.f * std::log10(power)) << std::endl;
-        }
-        else if (! signal_detected && signal_present_) {
+        if (! signal_detected && signal_present_) {
             std::cout << fmt::format(
-                "Signal lost, duration: {:.1f} ms",
-                on_time_ * 1.f / 240.f  // 240 kHz
-                // on_time_ * 1.f / 8.f  // 8 kHz
+                "Signal lost, duration: {:.1f} ms / {} samples",
+                on_time_ * 1.f / 8.f,
+                on_time_
             ) << std::endl;
 
-            if (on_time_ >= 12000) { // 50 ms @ 240 kHz
-            // if (on_time_ >= 400) { // 50 ms @ 8 kHz
+            if (on_time_ >= 160) { // 20 ms @ 8 kHz
                 click();
             }
         }
@@ -235,13 +240,12 @@ void ARCAL::onSamples(std::vector<std::uint8_t>&& in)
         dc_offset_ = calculateDCOffset(in);
     }
 
-    auto samples_240khz = convertSamples(in, filter_dc_);
+    auto samples = convertSamples(in, filter_dc_);
+    auto fft_bins = fft_.execute(samples);
 
-    // auto samples_24khz = decimate_by_10(samples_240khz);
-    // auto samples_corrected_24khz = coarse_frequency_correction(samples_24khz);
-    // auto samples_8khz = decimate_by_3(samples_24khz);
-    // auto signal_detected = detect_power(samples_8khz);
-    detectClicks(samples_240khz);
+    detectClicks(fft_bins);
 
-    waterfall_.onSamples(samples_240khz);
+    if (show_waterfall_) {
+        waterfall_.onSamples(samples);
+    }
 }
