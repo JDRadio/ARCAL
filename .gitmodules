@@ -1,3 +1,6 @@
 [submodule "lib/rtl-sdr"]
 	path = lib/rtl-sdr
 	url = https://github.com/osmocom/rtl-sdr.git
+[submodule "lib/plasma-dsp"]
+	path = lib/plasma-dsp
+	url = https://github.com/JDRadio/plasma-dsp.git

@@ -12,9 +12,17 @@
 
 ARCAL::ARCAL(void) noexcept :
     dev_{},
-    fft_{}
+    dc_blocker_{},
+    waterfall_{},
+    dc_offset_{},
+    filter_dc_{false},
+    frequency_{146'430'000U},
+    sample_rate_{240'000U},
+    agc_enabled_{false},
+    rf_gain_{0.f},
+    signal_present_{false},
+    clicks_{}
 {
-    fft_.setLength(FFT_SIZE);
 }
 
 void ARCAL::showBasicInfo(void) noexcept
@@ -61,23 +69,29 @@ void ARCAL::run(void) noexcept
         return;
     }
 
-    showDeviceInfo();
+    std::cout << std::endl;
+    std::cout << fmt::format("Frequency:       {:.3f} MHz", frequency_ / 1e6) << std::endl;
+    std::cout << fmt::format("Sample Rate:     {:.3f} Ksps", sample_rate_ / 1e3) << std::endl;
+    std::cout << fmt::format("Hardware AGC:    {}", agc_enabled_ ? "ON" : "OFF") << std::endl;
+    std::cout << fmt::format("Hardware Gain:   {:.1f} dB", rf_gain_) << std::endl;
+    std::cout << fmt::format("DC Compensation: {}", ! dc_offset_ ? "ON" : "OFF") << std::endl;
+    std::cout << std::endl;
 
-    if (! dev_.setCenterFrequency(146'430'000U)) {
+    if (! dev_.setCenterFrequency(frequency_)) {
         std::cerr << "Failed to set center frequency" << std::endl;
         return;
     }
 
-    if (! dev_.setSampleRate(1'024'000U)) {
+    if (! dev_.setSampleRate(sample_rate_)) {
         std::cerr << "Failed to set sample rate" << std::endl;
         return;
     }
 
-    if (! dev_.setAgcMode(false)) {
+    if (! dev_.setAgcMode(agc_enabled_)) {
         std::cerr << "Failed to set AGC" << std::endl;
     }
 
-    if (! dev_.setGain(28.f)) {
+    if (! dev_.setGain(rf_gain_)) {
         std::cerr << "Failed to set gain" << std::endl;
     }
 
@@ -92,56 +106,18 @@ void ARCAL::run(void) noexcept
     }
 }
 
-unsigned int ARCAL::mapPowerLevel(float lvl, float in_min, float in_max, unsigned int out_min, unsigned int out_max)
+float ARCAL::calculateDCOffset(std::vector<std::uint8_t> const& in)
 {
-    if (lvl >= in_max) {
-        return out_max;
+    unsigned int const in_size = in.size();
+    std::vector<float> samples(in_size);
+
+    for (unsigned int n = 0; n < in_size; n += 2) {
+        // The weird value here is to compensate for DC offset
+        samples[n] = (static_cast<float>(in[n]) - 127.5f);
+        samples[n+1] = (static_cast<float>(in[n+1]) - 127.5f);
     }
 
-    if (lvl <= in_min) {
-        return out_min;
-    }
-
-    float r = in_max - in_min;
-    float x = lvl - in_min;
-
-    return (out_max - out_min) * x / r + out_min;
-}
-
-char ARCAL::getWeightCharacter(float val)
-{
-    static char const* greyscale_lo_hi = " .:-=+*#%@";
-
-    return greyscale_lo_hi[mapPowerLevel(val, 0.f, 90.f, 0, 9)];
-}
-
-int ARCAL::getWeightColor(float val)
-{
-    static int color_lo_hi[] = {
-        34,
-        34,
-        34,
-        34,
-        32,
-        32,
-        33,
-        33,
-        31,
-        31
-    };
-
-    return color_lo_hi[mapPowerLevel(val, 0.f, 90.f, 0, 9)];
-}
-
-std::string ARCAL::getWeightColorString(float val)
-{
-    return fmt::format("\033[0;{}m{}", getWeightColor(val), getWeightCharacter(val));
-}
-
-void ARCAL::pushToAverage(unsigned int index, float val)
-{
-    auto& vec = averages_[index];
-    vec.push_back(val);
+    return std::accumulate(std::begin(samples), std::end(samples), 0.f) / static_cast<float>(in_size);
 }
 
 std::vector<float> ARCAL::convertSamples(std::vector<std::uint8_t> const& in, bool block_dc)
@@ -149,63 +125,123 @@ std::vector<float> ARCAL::convertSamples(std::vector<std::uint8_t> const& in, bo
     unsigned int const in_size = in.size();
     std::vector<float> samples(in_size);
 
+    float const offset_value = 127.5f + dc_offset_.value();
+
     for (unsigned int n = 0; n < in_size; n += 2) {
-        float i = in[n] * 1.f/256.f - 1.f;
-        float q = in[n+1] * 1.f/256.f - 1.f;
+        // The weird value here is to compensate for DC offset
+        samples[n] = (static_cast<float>(in[n]) - offset_value) * (1.f / 128.f);
+        samples[n+1] = (static_cast<float>(in[n+1]) - offset_value) * (1.f / 128.f);
+    }
 
-        if (block_dc) {
-            dc_blocker_.execute(i, q);
+    if (block_dc) {
+        for (unsigned int n = 0; n < in_size; n += 2) {
+            dc_blocker_.execute(samples[n], samples[n+1]);
         }
-
-        samples[n] = i;
-        samples[n+1] = q;
     }
 
     return samples;
 }
 
-void ARCAL::calculateFFT(std::vector<float> const& samples)
+void ARCAL::onRemoteActivation(void)
 {
-    auto spec = fft_.execute(samples);
-    unsigned int const spec_size = spec.size();
+    std::cout << "\033[1;31mREMOTE ACTIVATION DETECTED!!" << std::endl;
+}
 
-    for (unsigned int i = 0; i < spec_size; i += 2) {
-        if (i % (FFT_SIZE * 2) == 0) {
-            ++fft_count_;
+void ARCAL::verifyClicks(void)
+{
+    auto now = std::chrono::steady_clock::now();
+    auto it = std::begin(clicks_);
+
+    while (it != std::end(clicks_)) {
+        // Remove clicks older than 5 seconds
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - *it).count() > 5000) {
+            it = clicks_.erase(it);
+            continue;
         }
 
-        pushToAverage((i/2) % FFT_SIZE, spec[i]*spec[i] + spec[i+1]*spec[i+1]);
+        ++it;
+    }
+
+    if (clicks_.size() >= 5) {
+        clicks_.clear();
+        onRemoteActivation();
     }
 }
 
-void ARCAL::displayFFT(void)
+void ARCAL::click(void)
 {
-    float const ref_level = -50.f;
+    clicks_.insert(std::chrono::steady_clock::now());
+    verifyClicks();
+}
 
-    while (fft_count_ >= NUM_SAMPLES_PER_AVERAGE) {
-        fft_count_ -= NUM_SAMPLES_PER_AVERAGE;
+void ARCAL::detectClicks(std::vector<float> const& samples)
+{
+    //! \todo 2021-05-09: add dynamic threshold over noise
+    static float const detection_threshold_ = std::pow(10.f, 10.f / 10.f);
+    //! \todo 2021-05-09: add hold time
+    static unsigned int hold_ = 0;
+    //! \todo 2021-05-09: add noise level estimation
+    static float const noise_level_ = std::pow(10.f, -39.f / 10.f);
+    //! \todo 2021-05-09: consider a click as a transmission of not more than X milliseconds
+    static unsigned int on_time_ = 0;
 
-        std::stringstream sb;
+    unsigned int samples_size = samples.size();
+    auto const* ptr = samples.data();
 
-        float total_power = 0;
+    for (unsigned int n = 0; n < samples_size; n += 2) {
+        float power = ptr[n]*ptr[n] + ptr[n+1]*ptr[n+1];
 
-        for (unsigned int i = 0; i < FFT_SIZE; ++i) {
-            auto& vec = averages_[i];
-            float pwr = std::accumulate(std::begin(vec), std::begin(vec) + NUM_SAMPLES_PER_AVERAGE, 0.f) / NUM_SAMPLES_PER_AVERAGE;
-            total_power += pwr;
-            vec.erase(std::begin(vec), std::begin(vec) + NUM_SAMPLES_PER_AVERAGE);
-            sb << getWeightColorString(10 * std::log10(pwr) - ref_level);
+        bool signal_detected = (power >= noise_level_ * detection_threshold_);
+
+        if (! signal_detected) {
+            if (hold_ > 0) {
+                --hold_;
+                signal_detected = true;
+            }
+        }
+        else {
+            ++on_time_;
+            hold_ = 4800;   // 20 ms @ 240 kHz
+            // hold_ = 160;   // 20 ms @ 8 kHz
         }
 
-        total_power = 10 * std::log10(total_power);
-        std::cout << fmt::format("{}  \033[0;{}m{:.4f}", sb.str(), getWeightColor(total_power - ref_level), total_power) << std::endl;
+        if (signal_detected && ! signal_present_) {
+            std::cout << fmt::format("Incoming signal, power: {:.3f} dBFS", 10.f * std::log10(power)) << std::endl;
+        }
+        else if (! signal_detected && signal_present_) {
+            std::cout << fmt::format(
+                "Signal lost, duration: {:.1f} ms",
+                on_time_ * 1.f / 240.f  // 240 kHz
+                // on_time_ * 1.f / 8.f  // 8 kHz
+            ) << std::endl;
+
+            if (on_time_ >= 12000) { // 50 ms @ 240 kHz
+            // if (on_time_ >= 400) { // 50 ms @ 8 kHz
+                click();
+            }
+        }
+
+        if (! signal_detected) {
+            on_time_ = 0;
+        }
+
+        signal_present_ = signal_detected;
     }
 }
 
 void ARCAL::onSamples(std::vector<std::uint8_t>&& in)
 {
-    auto samples = convertSamples(in, true);
+    if (! dc_offset_) {
+        dc_offset_ = calculateDCOffset(in);
+    }
 
-    calculateFFT(samples);
-    displayFFT();
+    auto samples_240khz = convertSamples(in, filter_dc_);
+
+    // auto samples_24khz = decimate_by_10(samples_240khz);
+    // auto samples_corrected_24khz = coarse_frequency_correction(samples_24khz);
+    // auto samples_8khz = decimate_by_3(samples_24khz);
+    // auto signal_detected = detect_power(samples_8khz);
+    detectClicks(samples_240khz);
+
+    waterfall_.onSamples(samples_240khz);
 }

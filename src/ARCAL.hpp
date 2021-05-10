@@ -10,9 +10,13 @@
 #include "Device.hpp"
 #include "FFT.hpp"
 #include "DCBlocker.hpp"
+#include "Waterfall.hpp"
 #include <string>
 #include <vector>
 #include <array>
+#include <optional>
+#include <chrono>
+#include <set>
 
 class ARCAL
 {
@@ -22,26 +26,27 @@ public:
     void showBasicInfo(void) noexcept;
     void showDeviceInfo(void) noexcept;
     void run(void) noexcept;
-    unsigned int mapPowerLevel(float lvl, float in_min, float in_max, unsigned int out_min, unsigned int out_max);
-    char getWeightCharacter(float val);
-    int getWeightColor(float val);
-    std::string getWeightColorString(float val);
-    void pushToAverage(unsigned int index, float val);
-    std::vector<float> convertSamples(std::vector<std::uint8_t> const& in, bool block_dc);
-    void calculateFFT(std::vector<float> const& samples);
-    void displayFFT(void);
     void onSamples(std::vector<std::uint8_t>&& in);
 
 private:
+    std::vector<float> convertSamples(std::vector<std::uint8_t> const& in, bool block_dc);
+    float calculateDCOffset(std::vector<std::uint8_t> const& in);
+    void click(void);
+    void detectClicks(std::vector<float> const& samples);
+    void verifyClicks(void);
+    void onRemoteActivation(void);
+
     Device dev_;
-    FFT fft_;
     DCBlocker dc_blocker_;
-    static constexpr unsigned int FFT_SIZE = 256;
-    static constexpr unsigned int NUM_SAMPLES_PER_AVERAGE = 100;
-    unsigned int fft_count_;
-    std::array<std::vector<float>, FFT_SIZE> averages_;
-    std::vector<float> noise_floor_;
-    unsigned int noise_floor_head_;
+    Waterfall waterfall_;
+    std::optional<float> dc_offset_;
+    bool filter_dc_;
+    unsigned int frequency_;
+    unsigned int sample_rate_;
+    bool agc_enabled_;
+    float rf_gain_;
+    bool signal_present_;
+    std::set<std::chrono::steady_clock::time_point> clicks_;
 };
 
 #endif

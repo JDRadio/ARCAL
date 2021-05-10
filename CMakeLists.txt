@@ -6,16 +6,13 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif ()
 
-set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
-add_compile_options(-Wall -Wextra -pedantic -Wno-unused-parameter)
-
-include_directories(src lib/rtl-sdr/include ${CMAKE_CURRENT_BINARY_DIR}/include ${CONAN_INCLUDE_DIRS})
+include_directories(src lib/plasma-dsp/plasma/src lib/rtl-sdr/include ${CMAKE_CURRENT_BINARY_DIR}/include ${CONAN_INCLUDE_DIRS})
 link_directories(${CMAKE_CURRENT_BINARY_DIR}/lib ${CMAKE_CURRENT_BINARY_DIR}/lib64 ${CONAN_LIB_DIRS})
 
 add_subdirectory(src)

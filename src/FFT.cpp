@@ -67,8 +67,8 @@ std::vector<float> FFT::execute(std::vector<float> const& in)
             fftwf_execute(plan_);
 
             for (unsigned int n = 0; n < length_; ++n) {
-                out.push_back(output_buffer_[n][0]);
-                out.push_back(output_buffer_[n][1]);
+                out.push_back(output_buffer_[n][0] / length_);
+                out.push_back(output_buffer_[n][1] / length_);
             }
         }
     }
