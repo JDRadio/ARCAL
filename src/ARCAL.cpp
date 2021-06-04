@@ -162,10 +162,6 @@ void ARCAL::onRemoteActivation(void)
 {
     std::cout << "\033[1;31mREMOTE ACTIVATION DETECTED!!" << std::endl;
 
-    if (task_.valid()) {
-	return;
-    }
-
     task_ = std::async(
         std::launch::async,
         [] {
