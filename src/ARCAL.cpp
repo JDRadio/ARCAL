@@ -9,12 +9,13 @@
 #include <sstream>
 #include <numeric>
 #include <fmt/format.h>
+#include <wiringPi.h>
 
 ARCAL::ARCAL(void) noexcept :
     dev_{},
     dc_blocker_{},
     waterfall_{},
-    dc_offset_{},
+    dc_offset_{std::make_pair(false, 0)},
     filter_dc_{false},
     frequency_{146'430'000U},
     sample_rate_{256'000U},
@@ -52,11 +53,17 @@ void ARCAL::showDeviceInfo(void) noexcept
 {
     auto gains = dev_.listGains();
 
-    if (! gains) {
+    if (! std::get<bool>(gains)) {
         std::cerr << "Failed to list available gains" << std::endl;
     }
     else {
-        std::cout << fmt::format("Available gain values: {}", fmt::join(gains.value(), ", ")) << std::endl;
+        std::cout << "Available gain values: ";
+        for (unsigned int n = 0; n < std::get<1>(gains).size(); ++n) {
+            if (n > 0) {
+                std::cout << ", ";
+            }
+            std::cout << std::get<1>(gains)[n] << std::endl;
+        }
     }
 }
 
@@ -77,7 +84,7 @@ void ARCAL::run(void) noexcept
     std::cout << fmt::format("Sample Rate:     {:.3f} Ksps", sample_rate_ / 1e3) << std::endl;
     std::cout << fmt::format("Hardware AGC:    {}", agc_enabled_ ? "ON" : "OFF") << std::endl;
     std::cout << fmt::format("Hardware Gain:   {:.1f} dB", rf_gain_) << std::endl;
-    std::cout << fmt::format("DC Compensation: {}", ! dc_offset_ ? "ON" : "OFF") << std::endl;
+    std::cout << fmt::format("DC Compensation: {}", ! std::get<0>(dc_offset_) ? "ON" : "OFF") << std::endl;
     std::cout << std::endl;
 
     if (! dev_.setCenterFrequency(frequency_)) {
@@ -103,7 +110,7 @@ void ARCAL::run(void) noexcept
         return;
     }
 
-    if (! dev_.readAsync([this] (auto&& buffer) { onSamples(std::move(buffer)); })) {
+    if (! dev_.readAsync([this] (auto&& buffer) { this->onSamples(std::move(buffer)); })) {
         std::cerr << "Failed to start reading samples" << std::endl;
         return;
     }
@@ -128,7 +135,7 @@ std::vector<float> ARCAL::convertSamples(std::vector<std::uint8_t> const& in, bo
     unsigned int const in_size = in.size();
     std::vector<float> samples(in_size);
 
-    float const offset_value = 127.5f + dc_offset_.value();
+    float const offset_value = 127.5f + std::get<1>(dc_offset_);
 
     for (unsigned int n = 0; n < in_size; n += 2) {
         // The weird value here is to compensate for DC offset
@@ -236,8 +243,9 @@ void ARCAL::detectClicks(std::vector<float> const& fft_samples)
 
 void ARCAL::onSamples(std::vector<std::uint8_t>&& in)
 {
-    if (! dc_offset_) {
-        dc_offset_ = calculateDCOffset(in);
+    if (! std::get<0>(dc_offset_)) {
+        std::get<1>(dc_offset_) = calculateDCOffset(in);
+        std::get<0>(dc_offset_) = true;
     }
 
     auto samples = convertSamples(in, filter_dc_);

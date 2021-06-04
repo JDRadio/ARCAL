@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 #include <array>
-#include <optional>
+#include <utility>
 #include <chrono>
 #include <set>
 
@@ -39,7 +39,7 @@ private:
     Device dev_;
     DCBlocker dc_blocker_;
     Waterfall waterfall_;
-    std::optional<float> dc_offset_;
+    std::pair<bool, float> dc_offset_;
     bool filter_dc_;
     unsigned int frequency_;
     unsigned int sample_rate_;

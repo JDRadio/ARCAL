@@ -19,8 +19,8 @@ Device::Device(Device&& other) noexcept :
     dev_{nullptr},
     handler_{nullptr}
 {
-    std::unique_lock our_lock{mutex_, std::defer_lock};
-    std::unique_lock other_lock{other.mutex_, std::defer_lock};
+    std::unique_lock<std::mutex> our_lock{mutex_, std::defer_lock};
+    std::unique_lock<std::mutex> other_lock{other.mutex_, std::defer_lock};
 
     std::lock(our_lock, other_lock);
 
@@ -33,8 +33,8 @@ Device::Device(Device&& other) noexcept :
 
 Device& Device::operator=(Device&& other) noexcept
 {
-    std::unique_lock our_lock{mutex_, std::defer_lock};
-    std::unique_lock other_lock{other.mutex_, std::defer_lock};
+    std::unique_lock<std::mutex> our_lock{mutex_, std::defer_lock};
+    std::unique_lock<std::mutex> other_lock{other.mutex_, std::defer_lock};
 
     std::lock(our_lock, other_lock);
 
@@ -96,7 +96,7 @@ std::vector<std::tuple<unsigned int, std::string, std::string, std::string, std:
 
 bool Device::setCenterFrequency(unsigned int freq) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;
@@ -107,7 +107,7 @@ bool Device::setCenterFrequency(unsigned int freq) noexcept
 
 bool Device::setSampleRate(unsigned int rate) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;
@@ -118,7 +118,7 @@ bool Device::setSampleRate(unsigned int rate) noexcept
 
 bool Device::readSync(std::vector<std::uint8_t>& out) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;
@@ -136,7 +136,7 @@ bool Device::readSync(std::vector<std::uint8_t>& out) noexcept
 
 bool Device::resetBuffer(void) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;
@@ -153,7 +153,7 @@ bool Device::resetBuffer(void) noexcept
 
 bool Device::setAgcMode(bool on) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;
@@ -170,7 +170,7 @@ bool Device::setAgcMode(bool on) noexcept
 
 bool Device::setGain(float gain) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;
@@ -185,19 +185,19 @@ bool Device::setGain(float gain) noexcept
     return result == 0;
 }
 
-std::optional<std::vector<float>> Device::listGains(void) noexcept
+std::pair<bool, std::vector<float>> Device::listGains(void) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
-        return {};
+        return std::make_pair(false, std::vector<float>{});
     }
 
     int num_gains = rtlsdr_get_tuner_gains(dev_, nullptr);
 
     if (num_gains < 0) {
         std::cerr << num_gains << std::endl;
-        return {};
+        return std::make_pair(false, std::vector<float>{});
     }
 
     std::vector<int> gains(num_gains);
@@ -205,7 +205,7 @@ std::optional<std::vector<float>> Device::listGains(void) noexcept
 
     if (result < 0) {
         std::cerr << result << std::endl;
-        return {};
+        return std::make_pair(false, std::vector<float>{});
     }
 
     std::vector<float> out;
@@ -213,12 +213,12 @@ std::optional<std::vector<float>> Device::listGains(void) noexcept
         out.push_back(static_cast<float>(x) / 10.0f);
     }
 
-    return out;
+    return std::make_pair(true, out);
 }
 
 bool Device::readAsync(std::function<void(std::vector<std::uint8_t>&&)> handler) noexcept
 {
-    std::lock_guard lock{mutex_};
+    std::lock_guard<std::mutex> lock{mutex_};
 
     if (! dev_) {
         return false;

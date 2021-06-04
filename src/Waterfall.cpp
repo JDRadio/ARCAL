@@ -8,7 +8,30 @@
 #include <iostream>
 #include <sstream>
 #include <numeric>
+#include <functional>
 #include <fmt/format.h>
+
+template<class ForwardIt>
+ForwardIt max_element(ForwardIt first, ForwardIt last)
+{
+    if (first == last) return last;
+    ForwardIt largest = first;
+    ++first;
+    for (; first != last; ++first) {
+        if (*largest < *first) {
+            largest = first;
+        }
+    }
+    return largest;
+}
+
+template<class T>
+constexpr const T& clamp( const T& v, const T& lo, const T& hi )
+{
+    if (v <= lo) { return lo; }
+    if (v >= hi) { return hi; }
+    return v;
+}
 
 Waterfall::Waterfall(void) noexcept :
     fft_{},
@@ -82,7 +105,7 @@ char Waterfall::getWeightCharacter(float val)
 {
     static char const* greyscale_lo_hi = " .:-=+*#%@";
 
-    return greyscale_lo_hi[mapPowerLevel(std::clamp(val, 0.f, scale_ * 9), 0.f, scale_ * 9, 0, 9)];
+    return greyscale_lo_hi[mapPowerLevel(clamp(val, 0.f, scale_ * 9), 0.f, scale_ * 9, 0, 9)];
 }
 
 int Waterfall::getWeightColor(float val)
@@ -100,7 +123,7 @@ int Waterfall::getWeightColor(float val)
         31
     };
 
-    return color_lo_hi[mapPowerLevel(std::clamp(val, 0.f, scale_ * 9), 0.f, scale_ * 9, 0, 9)];
+    return color_lo_hi[mapPowerLevel(clamp(val, 0.f, scale_ * 9), 0.f, scale_ * 9, 0, 9)];
 }
 
 std::string Waterfall::getWeightColorString(float val)
@@ -166,7 +189,7 @@ void Waterfall::displayFFT(void)
         std::cout << sb.str();
 
         if (show_max_power_) {
-            float max_power = 10.f * std::log10(*std::max_element(std::begin(bin_power), std::end(bin_power)));
+            float max_power = 10.f * std::log10(*max_element(std::begin(bin_power), std::end(bin_power)));
             std::cout << fmt::format("    \033[0;0mMax: \033[0;{}m{:+0.4f}", getWeightColor(max_power - reference_level_), max_power);
         }
 

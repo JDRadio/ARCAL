@@ -11,7 +11,7 @@
 #include <vector>
 #include <string>
 #include <tuple>
-#include <optional>
+#include <utility>
 #include <functional>
 #include <mutex>
 #include <exception>
@@ -66,7 +66,7 @@ public:
     bool resetBuffer(void) noexcept;
     bool setAgcMode(bool on) noexcept;
     bool setGain(float gain) noexcept;
-    std::optional<std::vector<float>> listGains(void) noexcept;
+    std::pair<bool, std::vector<float>> listGains(void) noexcept;
     bool readAsync(std::function<void(std::vector<std::uint8_t>&&)> handler) noexcept;
     bool cancelAsync(void) noexcept;
 
