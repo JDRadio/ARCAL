@@ -166,7 +166,7 @@ void ARCAL::onRemoteActivation(void)
         std::launch::async,
         [] {
             digitalWrite(0, 1);
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             digitalWrite(0, 0);
         }
     );
