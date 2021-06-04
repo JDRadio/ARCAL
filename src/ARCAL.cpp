@@ -17,7 +17,7 @@ ARCAL::ARCAL(void) noexcept :
     waterfall_{},
     dc_offset_{std::make_pair(false, 0)},
     filter_dc_{false},
-    frequency_{146'430'000U},
+    frequency_{118'025'000U},
     sample_rate_{256'000U},
     agc_enabled_{false},
     rf_gain_{0.f},
