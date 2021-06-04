@@ -9,6 +9,8 @@
 #include <sstream>
 #include <numeric>
 #include <fmt/format.h>
+#include <thread>
+#include <chrono>
 #include <wiringPi.h>
 
 ARCAL::ARCAL(void) noexcept :
@@ -24,9 +26,13 @@ ARCAL::ARCAL(void) noexcept :
     signal_present_{false},
     clicks_{},
     fft_{},
-    show_waterfall_{true}
+    show_waterfall_{true},
+    task_{}
 {
     fft_.setLength(32);
+
+    wiringPiSetup();
+    pinMode(0, OUTPUT);
 }
 
 void ARCAL::showBasicInfo(void) noexcept
@@ -155,6 +161,19 @@ std::vector<float> ARCAL::convertSamples(std::vector<std::uint8_t> const& in, bo
 void ARCAL::onRemoteActivation(void)
 {
     std::cout << "\033[1;31mREMOTE ACTIVATION DETECTED!!" << std::endl;
+
+    if (task_.valid()) {
+	return;
+    }
+
+    task_ = std::async(
+        std::launch::async,
+        [] {
+            digitalWrite(0, 1);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            digitalWrite(0, 0);
+        }
+    );
 }
 
 void ARCAL::verifyClicks(void)

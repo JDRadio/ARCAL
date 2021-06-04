@@ -17,6 +17,7 @@
 #include <utility>
 #include <chrono>
 #include <set>
+#include <future>
 
 class ARCAL
 {
@@ -49,6 +50,7 @@ private:
     std::set<std::chrono::steady_clock::time_point> clicks_;
     FFT fft_;
     bool show_waterfall_;
+    std::future<void> task_;
 };
 
 #endif

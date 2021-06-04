@@ -16,5 +16,7 @@ target_link_libraries(arcal
     usb-1.0
     fmt
     fftw3f
+    wiringPi
     m
+    pthread
 )
